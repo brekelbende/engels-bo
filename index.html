@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Woordjes Memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: a game table (felt-like indigo) with a stats strip on top; memory = English half left, other half right; quiz = one big question card. Deliberately single-theme. */
+:root {
+  --table: #26315c;
+  --table-deep: #1b2447;
+  --paper: #fffaf0;
+  --ink: #1f2440;
+  --back: #ffc94a;
+  --back-dot: #f2a81d;
+  --p1: #ff7a6b;
+  --p2: #4fd1a5;
+  --muted: #aab3dd;
+  --display: 'Baloo 2', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --body: 'Nunito', system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: radial-gradient(circle at 50% 0%, var(--table) 0%, var(--table-deep) 100%) fixed, var(--table-deep);
+  color: var(--paper); font-family: var(--body); font-size: 16px;
+  padding-inline: 16px; padding-block: 12px 24px; box-sizing: border-box;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button { font-family: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--back); outline-offset: 2px; }
+.wrap { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 4vw, 2.3rem); margin: 0; line-height: 1; letter-spacing: .01em; }
+h1 span { color: var(--back); }
+.tools { display: flex; gap: 8px; }
+.icon-btn { background: rgba(255,255,255,.08); color: var(--paper); border: 2px solid rgba(255,255,255,.15); border-radius: 999px; padding: 6px 14px; font-weight: 800; font-size: .9rem; }
+.icon-btn:hover { background: rgba(255,255,255,.16); }
+.icon-btn[aria-pressed="false"] { opacity: .55; }
+
+/* scoreboard */
+.stats { display: flex; flex-wrap: wrap; gap: 10px; }
+.stat { border-radius: 16px; padding: 8px 16px; background: rgba(255,255,255,.07); display: flex; flex-direction: column; min-width: 0; flex: 1 1 110px; }
+.stat small { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.stat b { font-family: var(--display); font-weight: 800; font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat.found b { color: var(--p2); } .stat.record b { color: var(--back); }
+
+/* board */
+.board { display: grid; gap: var(--gap, 10px); grid-template-columns: repeat(var(--cols, 5), var(--cw, 120px)); justify-content: center; perspective: 1200px; }
+.card { aspect-ratio: 4 / 5; position: relative; border: 0; padding: 0; background: none; border-radius: 14px; max-width: 100%; }
+.card .inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .45s cubic-bezier(.3,1.4,.5,1); border-radius: inherit; }
+.card.up .inner, .card.done .inner { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: inherit; display: flex; align-items: center; justify-content: center; text-align: center; padding: 8%; }
+.back { background: var(--back); background-image: radial-gradient(var(--back-dot) 18%, transparent 20%); background-size: 18px 18px; box-shadow: 0 4px 0 #c98612, 0 8px 18px rgba(0,0,0,.3); }
+.back::after { content: '?'; font-family: var(--display); font-weight: 800; color: var(--ink); font-size: calc(var(--cw) * .28); background: var(--paper); width: 46%; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; box-shadow: inset 0 -4px 0 rgba(0,0,0,.08); }
+.card:not(.up):not(.done):hover .back { filter: brightness(1.06); transform: translateY(-3px); transition: transform .15s; }
+.front { transform: rotateY(180deg); background: var(--paper); color: var(--ink); box-shadow: 0 4px 0 #d9d0bd, 0 8px 18px rgba(0,0,0,.3); flex-direction: column; gap: 4px; }
+.front .tagline { position: absolute; top: 6px; left: 0; right: 0; font-size: max(.55rem, calc(var(--cw) * .06)); font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #8a8fae; }
+.front .word { font-family: var(--display); font-weight: 800; line-height: 1.05; font-size: calc(var(--cw) * .13); overflow-wrap: break-word; hyphens: manual; }
+.front .word.nl { color: #3a5bd9; }
+.front .pico { font-size: calc(var(--cw) * .23); line-height: 1.15; }
+.pico svg { height: 1em; width: 1em; vertical-align: -.12em; }
+.pico u { text-decoration-thickness: .12em; text-underline-offset: .15em; font-family: var(--display); font-size: .6em; font-weight: 800; }
+.front .sent { font-size: calc(var(--cw) * .085); line-height: 1.3; font-weight: 700; }
+.front .sent b { color: #3a5bd9; }
+.card.done .front { box-shadow: 0 0 0 4px var(--p2), 0 4px 0 #d9d0bd; }
+.card.done { animation: pop .5s ease; }
+.card.miss .front { animation: shakeFront .4s ease; }
+@keyframes pop { 50% { transform: scale(1.08); } }
+@keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@keyframes shakeFront { 0%, 100% { transform: rotateY(180deg); } 25% { transform: rotateY(180deg) translateX(5px); } 75% { transform: rotateY(180deg) translateX(-5px); } }
+
+/* match banner */
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) translateY(140%); background: var(--paper); color: var(--ink); border-radius: 18px; padding: 12px 20px; box-shadow: 0 10px 30px rgba(0,0,0,.35); transition: transform .35s cubic-bezier(.3,1.4,.5,1); max-width: min(560px, calc(100% - 32px)); width: max-content; text-align: center; z-index: 5; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast .t1 { font-family: var(--display); font-weight: 800; font-size: 1.3rem; }
+.toast .t1 em { font-style: normal; color: #3a5bd9; }
+.toast .t2 { font-size: .9rem; color: #4a4f6e; }
+
+/* overlay screens */
+.overlay { position: fixed; inset: 0; background: rgba(15,20,42,.72); display: grid; place-items: center; padding: 16px; z-index: 10; backdrop-filter: blur(3px); overflow-y: auto; }
+.panel { background: var(--paper); color: var(--ink); border-radius: 26px; padding: clamp(20px, 4vw, 32px); width: min(560px, 100%); display: flex; flex-direction: column; gap: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+.panel h2 { font-family: var(--display); font-weight: 800; font-size: 2rem; margin: 0; line-height: 1.05; text-wrap: balance; }
+.panel p { margin: 0; color: #4a4f6e; line-height: 1.45; }
+.field-label { font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: #6b7095; margin-bottom: 6px; display: block; }
+#n1 { width: 100%; font: 800 1.1rem var(--body); padding: 10px 14px; border-radius: 14px; border: 3px solid #e6dfcf; background: #fff; color: var(--ink); }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice { border: 3px solid #e6dfcf; background: #fff; color: var(--ink); border-radius: 14px; padding: 8px 14px; font-weight: 800; font-size: .95rem; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; flex: 1 1 140px; text-align: left; }
+.choice small { font-weight: 600; color: #6b7095; font-size: .78rem; }
+.choice[aria-checked="true"] { border-color: var(--ink); background: #fff3cf; }
+.go { background: var(--ink); color: var(--paper); border: 0; border-radius: 16px; padding: 14px; font-family: var(--display); font-weight: 800; font-size: 1.4rem; box-shadow: 0 5px 0 #000; }
+.go:active { transform: translateY(3px); box-shadow: 0 2px 0 #000; }
+.result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stars { font-size: 2.6rem; letter-spacing: .1em; color: var(--back-dot); line-height: 1; }
+.stars .off { color: #e6dfcf; }
+.result div { border-radius: 16px; padding: 10px 14px; background: #f3eddf; font-weight: 800; }
+.result div { font-size: .8rem; color: #6b7095; text-transform: uppercase; letter-spacing: .08em; }
+.result div span { display: block; font-family: var(--display); font-size: 2rem; line-height: 1.1; color: var(--ink); text-transform: none; letter-spacing: 0; }
+.result .new span { color: #d9480f; }
+canvas#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 11; width: 100%; height: 100%; }
+
+@media (max-width: 560px) { .stat b { font-size: 1.3rem; } .stat { padding: 6px 12px; } }
+@media (prefers-reduced-motion: reduce) {
+  .stat.low b { animation: none; }
+  .card .inner { transition: none; }
+  .card.done, .card.miss .front { animation: none; }
+}
+
+/* split board: English left, other side right */
+.split { display: grid; grid-template-columns: 1fr auto 1fr; gap: clamp(8px, 2vw, 24px); align-items: start; }
+.half { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.half-label { text-align: center; font-size: .75rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.divider { align-self: stretch; width: 3px; border-radius: 3px; background: repeating-linear-gradient(to bottom, rgba(255,255,255,.22) 0 10px, transparent 10px 18px); }
+.half.right .back { background-color: #ffb36b; background-image: radial-gradient(#ee8a3a 18%, transparent 20%); box-shadow: 0 4px 0 #c76a1c, 0 8px 18px rgba(0,0,0,.3); }
+.half .back::after { content: var(--lbl, '?'); font-size: calc(var(--cw) * .2); }
+
+/* countdown */
+.timebar { height: 10px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+.timebar i { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--p2); transition: width 1s linear, background .3s; }
+.timebar.low i { background: var(--p1); }
+.stat.low b { color: var(--p1); animation: beat 1s ease infinite; }
+@keyframes beat { 50% { transform: scale(1.12); } }
+.stat b { transform-origin: left center; }
+
+/* quiz */
+.quiz { display: flex; flex-direction: column; align-items: center; gap: 18px; padding-block: 8px; }
+.qcard { background: var(--paper); color: var(--ink); border-radius: 26px; padding: clamp(18px, 4vw, 34px); width: min(720px, 100%); display: flex; flex-direction: column; gap: 14px; box-shadow: 0 6px 0 #d9d0bd, 0 16px 40px rgba(0,0,0,.35); }
+.qtop { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #8a8fae; }
+.qword { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 5.5vw, 3.4rem); line-height: 1; text-align: center; text-wrap: balance; }
+.qword button { background: none; border: 0; font-size: 1.4rem; vertical-align: middle; color: #8a8fae; padding: 4px; }
+.hints { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.hint-btn { background: #fff3cf; color: var(--ink); border: 2px dashed var(--back-dot); border-radius: 999px; padding: 6px 14px; font-weight: 800; font-size: .9rem; }
+.hint-btn:disabled { opacity: .45; cursor: default; }
+.hint-box { background: #f3eddf; border-radius: 16px; padding: 12px 16px; text-align: center; display: flex; flex-direction: column; gap: 6px; }
+.hint-box .pico { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; }
+.hint-box .sent { font-weight: 700; line-height: 1.4; }
+.hint-box .sent b { color: #3a5bd9; }
+.answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ans { background: #fff; color: var(--ink); border: 3px solid #e6dfcf; border-radius: 18px; padding: 12px; font-family: var(--display); font-weight: 800; font-size: clamp(1.1rem, 2.6vw, 1.5rem); line-height: 1.1; box-shadow: 0 4px 0 #e6dfcf; transition: transform .1s; }
+.ans:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--ink); }
+.ans:disabled { cursor: default; }
+.ans.right { background: #d8f7ea; border-color: #1f9e72; box-shadow: 0 4px 0 #1f9e72; }
+.ans.wrong { background: #ffe0dc; border-color: #d9483b; box-shadow: 0 4px 0 #d9483b; animation: shake .4s ease; }
+.ans.fade { opacity: .45; }
+.ans kbd { font-family: var(--body); font-size: .7rem; color: #8a8fae; display: block; margin-bottom: 2px; }
+.feedback { min-height: 1.6em; text-align: center; font-weight: 800; font-size: 1.1rem; }
+.feedback.ok { color: #1f9e72; } .feedback.no { color: #d9483b; }
+.next { align-self: center; }
+.dots { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; max-width: 720px; }
+.dots i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,.15); }
+.dots i.ok { background: var(--p2); } .dots i.hint { background: var(--back); } .dots i.no { background: var(--p1); } .dots i.now { outline: 2px solid var(--paper); outline-offset: 2px; }
+.legend { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; font-size: .8rem; color: var(--muted); font-weight: 700; }
+.legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+.missed { background: #f3eddf; border-radius: 16px; padding: 10px 14px; font-size: .95rem; line-height: 1.6; }
+.missed b { color: #3a5bd9; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-row .go { flex: 1 1 180px; }
+.go.alt { background: #fff; color: var(--ink); border: 3px solid var(--ink); box-shadow: 0 5px 0 var(--ink); }
+.setup-sec { display: flex; flex-direction: column; gap: 18px; }
+@media (max-width: 560px) {
+  .answers { grid-template-columns: 1fr; }
+  .split { grid-template-columns: 1fr 1fr; }
+  .divider { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Woordjes <span id="h1sub">Memory</span></h1>
+    <div class="tools">
+      <button class="icon-btn" id="sound" aria-pressed="true" title="Engelse woorden hardop voorlezen">Voorlezen aan</button>
+      <button class="icon-btn" id="fs" title="Volledig scherm (Esc om terug te gaan)">Volledig scherm</button>
+      <button class="icon-btn" id="newgame">Nieuw spel</button>
+    </div>
+  </header>
+
+  <section class="stats" aria-live="polite">
+    <div class="stat found"><small id="l1">Gevonden</small><b id="s1">0/10</b></div>
+    <div class="stat"><small id="l2">Beurten</small><b id="s2">0</b></div>
+    <div class="stat" id="timeStat"><small id="lt">Tijd</small><b id="time">0:00</b></div>
+    <div class="stat record"><small>Record</small><b id="best">–</b></div>
+  </section>
+  <div class="timebar" id="timebar" hidden><i id="timefill"></i></div>
+
+  <main id="memoryView" class="split" aria-label="Speelveld">
+    <div class="half left"><div class="half-label" id="labL">English</div><div class="board" id="boardL"></div></div>
+    <div class="divider" aria-hidden="true"></div>
+    <div class="half right"><div class="half-label" id="labR">Nederlands</div><div class="board" id="boardR"></div></div>
+  </main>
+
+  <main id="quizView" class="quiz" hidden>
+    <div class="qcard">
+      <div class="qtop"><span>Wat betekent dit in het Nederlands?</span><span id="qnum">1/10</span></div>
+      <div class="qword"><span id="qword">clever</span> <button id="say" title="Laat het woord voorlezen" aria-label="Voorlezen">🔊</button></div>
+      <div class="hints">
+        <button class="hint-btn" id="hintPico">Hint: plaatje</button>
+        <button class="hint-btn" id="hintSent">Hint: zin</button>
+      </div>
+      <div class="hint-box" id="hintBox" hidden></div>
+      <div class="answers" id="answers"></div>
+      <div class="feedback" id="feedback" aria-live="polite"></div>
+      <button class="go next" id="next" hidden>Volgende</button>
+    </div>
+    <div class="dots" id="dots"></div>
+    <div class="legend"><span style="--c: var(--p2)">goed</span><span style="--c: var(--back)">goed met hint</span><span style="--c: var(--p1)">fout</span></div>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
+
+<div class="overlay" id="setup">
+  <div class="panel" role="dialog" aria-labelledby="setupTitle">
+    <h2 id="setupTitle">Woordjes oefenen</h2>
+    <div><label class="field-label" for="n1">Je naam</label><input id="n1" maxlength="14" value="" placeholder="Jouw naam"></div>
+    <div>
+      <span class="field-label">Welke woordjes?</span>
+      <div class="choices" role="radiogroup" id="listGroup">
+        <button class="choice" role="radio" data-list="u2" aria-checked="true">Unit 2<small>landen en steden</small></button>
+        <button class="choice" role="radio" data-list="u1" aria-checked="false">Unit 1<small>karakter en hobby's</small></button>
+        <button class="choice" role="radio" data-list="all" aria-checked="false">Allebei<small>70 woordjes</small></button>
+      </div>
+    </div>
+    <div>
+      <span class="field-label">Welk spel?</span>
+      <div class="choices" role="radiogroup" id="gameGroup">
+        <button class="choice" role="radio" data-game="memory" aria-checked="true">Memory<small>zoek de paren</small></button>
+        <button class="choice" role="radio" data-game="quiz" aria-checked="false">Quiz Engels → Nederlands<small>kies het goede antwoord</small></button>
+      </div>
+    </div>
+    <div>
+      <span class="field-label">Aftelklok</span>
+      <div class="choices" role="radiogroup" id="clockGroup">
+        <button class="choice" role="radio" data-clock="off" aria-checked="true">Uit<small>geen haast</small></button>
+        <button class="choice" role="radio" data-clock="calm" aria-checked="false">Rustig<small id="calmTxt">genoeg tijd</small></button>
+        <button class="choice" role="radio" data-clock="fast" aria-checked="false">Snel<small id="fastTxt">opschieten!</small></button>
+      </div>
+    </div>
+    <div class="setup-sec" id="memOpts">
+      <div>
+        <span class="field-label">Wat zoek je bij elkaar?</span>
+        <div class="choices" role="radiogroup" id="modeGroup">
+          <button class="choice" role="radio" data-mode="ennl" aria-checked="true">Engels + Nederlands<small>woord ↔ vertaling</small></button>
+          <button class="choice" role="radio" data-mode="picoen" aria-checked="false">Plaatje + Engels<small>plaatje ↔ woord</small></button>
+          <button class="choice" role="radio" data-mode="picosent" aria-checked="false">Plaatje + zin<small>voor de echte kenners</small></button>
+        </div>
+      </div>
+      <div>
+        <span class="field-label">Hoeveel paren?</span>
+        <div class="choices" role="radiogroup" id="sizeGroup">
+          <button class="choice" role="radio" data-size="6" aria-checked="false">6 paren<small>snel potje</small></button>
+          <button class="choice" role="radio" data-size="10" aria-checked="true">10 paren<small>normaal</small></button>
+          <button class="choice" role="radio" data-size="15" aria-checked="false">15 paren<small>lang en lastig</small></button>
+        </div>
+      </div>
+      <p>Links liggen de Engelse kaarten, rechts de andere. Draai er links één om en rechts één. Horen ze bij elkaar? Dan blijven ze liggen.</p>
+    </div>
+    <div class="setup-sec" id="quizOpts" hidden>
+      <div>
+        <span class="field-label">Hoeveel vragen?</span>
+        <div class="choices" role="radiogroup" id="countGroup">
+          <button class="choice" role="radio" data-count="10" aria-checked="true">10 vragen<small>even oefenen</small></button>
+          <button class="choice" role="radio" data-count="20" aria-checked="false">20 vragen<small>flink oefenen</small></button>
+          <button class="choice" role="radio" data-count="999" aria-checked="false">Alle woorden<small>de hele lijst</small></button>
+        </div>
+      </div>
+      <p>Je ziet een Engels woord en kiest de goede vertaling. Weet je het niet? Vraag een hint: een plaatje of een zin. Zonder hint verdien je een ster.</p>
+    </div>
+    <button class="go" id="start">Start!</button>
+  </div>
+</div>
+
+<div class="overlay" id="end" hidden>
+  <div class="panel" role="dialog" aria-labelledby="endTitle">
+    <h2 id="endTitle">Klaar!</h2>
+    <div class="stars" id="stars"></div>
+    <div class="result"><div><em id="e1k" style="font-style:normal">Beurten</em><span id="e1">0</span></div><div>Tijd<span id="e2">0:00</span></div><div id="eb">Record<span id="e3">–</span></div></div>
+    <p id="endText"></p>
+    <div class="missed" id="missed" hidden></div>
+    <div class="btn-row">
+      <button class="go alt" id="practice" hidden>Oefen de foute woorden</button>
+      <button class="go" id="again">Nog een keer!</button>
+    </div>
+  </div>
+</div>
+<canvas id="confetti"></canvas>
+
+<script src="words.js"></script>
+<script>
+let WORDS = LISTS.u2;
+function setWords(l) { WORDS = l === 'all' ? [...LISTS.u1, ...LISTS.u2] : (LISTS[l] || LISTS.u2); }
+const listKey = l => !l || l === 'u1' ? '' : l + '-';   // unit 1 keeps its old record keys
+
+
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+let S = null;      // memory state
+let Q = null;      // quiz state
+let busy = false;
+let settings = { list: 'u2', game: 'memory', mode: 'ennl', size: 10, count: 10, clock: 'off', name: '', sound: true, ...store.get('wm1-settings', {}) };
+let records = store.get('wm1-records', {});
+
+function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function sentHTML(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function fmt(sec) { return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
+function cur() { return settings.game === 'quiz' ? Q : S; }
+
+function speak(text) {
+  if (!settings.sound) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text.replace('...', ''));
+    u.lang = 'en-GB'; u.rate = 0.85;
+    const vs = speechSynthesis.getVoices();
+    const v = vs.find(v => v.lang === 'en-GB') || vs.find(v => v.lang.startsWith('en'));
+    if (v) u.voice = v;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  } catch {}
+}
+
+const CHEERS = ['Goed zo!', 'Top!', 'Yes!', 'Knap!', 'Super!', 'Well done!'];
+const cheer = () => CHEERS[Math.floor(Math.random() * CHEERS.length)];
+let toastTimer;
+function showToast(h1, h2, ms = 3200) {
+  $('t1').innerHTML = h1; $('t2').innerHTML = h2;
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), ms);
+}
+
+/* clock: memory = one countdown for the whole game, quiz = a fresh countdown per question */
+const CLOCK = { memory: { calm: 12, fast: 7 }, quiz: { calm: 20, fast: 10 } };   // memory: seconds per pair
+const clockKey = c => c && c !== 'off' ? '-' + c : '';
+
+function updateClock() {
+  const g = cur(); if (!g) return;
+  const on = !!g.limit;
+  $('timebar').hidden = !on;
+  $('lt').textContent = on ? 'Nog' : 'Tijd';
+  if (!on) { $('time').textContent = fmt(g.secs); $('timeStat').classList.remove('low'); return; }
+  const left = Math.max(0, g.rem);
+  $('time').textContent = fmt(left);
+  $('timefill').style.width = (left / g.limit * 100) + '%';
+  const low = left <= (settings.game === 'quiz' ? 4 : 10) && !g.finished && !(settings.game === 'quiz' && g.answered);
+  $('timebar').classList.toggle('low', low); $('timeStat').classList.toggle('low', low);
+}
+
+setInterval(() => {
+  const g = cur();
+  if (!g || !g.started || g.finished || document.visibilityState !== 'visible' || !$('setup').hidden) return;
+  g.secs++;
+  if (g.limit && !(settings.game === 'quiz' && g.answered)) {
+    g.rem--;
+    if (g.rem <= 0) { updateClock(); timeUp(); return; }
+  }
+  updateClock();
+}, 1000);
+
+function timeUp() {
+  if (settings.game === 'quiz') { if (!Q.answered) answer(null, null); }
+  else if (!S.finished) { S.finished = true; busy = true; setTimeout(() => finishMemory(true), 400); }
+}
+
+/* ---------- MEMORY ---------- */
+const LABELS = { ennl: ['English', 'Nederlands'], picoen: ['Plaatjes', 'English'], picosent: ['Plaatjes', 'Zinnen'] };
+
+function faceHTML(idx, side, mode) {
+  const w = WORDS[idx];
+  if (mode === 'ennl') return side === 0 ? `<span class="word">${esc(w[0])}</span>` : `<span class="word nl">${esc(w[1])}</span>`;
+  if (side === 0) return `<span class="pico">${w[3]}</span>`;
+  if (mode === 'picoen') return `<span class="word">${esc(w[0])}</span>`;
+  return `<span class="sent">${sentHTML(w[2])}</span>`;
+}
+
+function newMemory() {
+  busy = false;
+  const picks = shuffle([...WORDS.keys()]).slice(0, settings.size);
+  const lim = settings.clock === 'off' ? 0 : picks.length * CLOCK.memory[settings.clock];
+  S = { mode: settings.mode, n: picks.length, left: shuffle([...picks]), right: shuffle([...picks]), done: [], open: { L: null, R: null }, moves: 0, secs: 0, started: false, clock: settings.clock, limit: lim, rem: lim, wl: settings.list };
+  renderMemory();
+}
+
+function layoutMemory() {
+  const n = S.n, view = $('memoryView');
+  const narrow = innerWidth <= 560;
+  const W = (view.clientWidth - (narrow ? 8 : 60)) / 2;
+  const top = $('boardL').getBoundingClientRect().top + scrollY;
+  const H = Math.max(240, innerHeight - top - 20);
+  const gap = W < 300 ? 5 : 9;
+  let best = { cw: 0, cols: 2, score: 0 };
+  for (let cols = 1; cols <= 6; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cw = Math.min((W - gap * (cols - 1)) / cols, ((H - gap * (rows - 1)) / rows) * 0.8);
+    const score = cw * (n % cols ? 0.93 : 1);
+    if (score > best.score) best = { cw, cols, score };
+  }
+  best.cw = Math.min(Math.max(best.cw, 54), (W - gap * (best.cols - 1)) / best.cols);
+  for (const b of [$('boardL'), $('boardR')]) {
+    b.style.setProperty('--cols', best.cols);
+    b.style.setProperty('--cw', Math.floor(best.cw) + 'px');
+    b.style.setProperty('--gap', gap + 'px');
+  }
+}
+
+function cardEl(side, pos) {
+  const w = side === 'L' ? S.left[pos] : S.right[pos];
+  const el = document.createElement('button');
+  const done = S.done.includes(w);
+  el.className = 'card' + (done ? ' done' : '') + (S.open[side] === pos ? ' up' : '');
+  el.setAttribute('aria-label', (side === 'L' ? 'Linker' : 'Rechter') + ' kaart ' + (pos + 1));
+  el.innerHTML = `<div class="inner"><div class="face back"></div><div class="face front">${faceHTML(w, side === 'L' ? 0 : 1, S.mode)}</div></div>`;
+  el.addEventListener('click', () => flip(side, pos));
+  return el;
+}
+
+function renderMemory() {
+  const [l, r] = LABELS[S.mode];
+  $('labL').textContent = l; $('labR').textContent = r;
+  // card backs: EN on the English side, NL on the Dutch side, ? on pictures and sentences
+  const backs = { ennl: ['"EN"', '"NL"'], picoen: ['"?"', '"EN"'], picosent: ['"?"', '"?"'] }[S.mode];
+  document.querySelector('.half.left').style.setProperty('--lbl', backs[0]);
+  document.querySelector('.half.right').style.setProperty('--lbl', backs[1]);
+  $('boardL').innerHTML = ''; $('boardR').innerHTML = '';
+  S.left.forEach((_, i) => $('boardL').appendChild(cardEl('L', i)));
+  S.right.forEach((_, i) => $('boardR').appendChild(cardEl('R', i)));
+  layoutMemory();
+  statsMemory();
+}
+
+function statsMemory() {
+  $('l1').textContent = 'Gevonden'; $('l2').textContent = 'Beurten';
+  $('s1').textContent = S.done.length + '/' + S.n;
+  $('s2').textContent = S.moves;
+  updateClock();
+  const r = records[listKey(S.wl) + S.mode + '-' + S.n + clockKey(S.clock)];
+  $('best').textContent = r ? r.moves + ' beurten' : '–';
+}
+
+function flip(side, pos) {
+  if (busy || !S || S.finished) return;
+  const w = side === 'L' ? S.left[pos] : S.right[pos];
+  if (S.done.includes(w)) return;
+  const board = side === 'L' ? $('boardL') : $('boardR');
+  if (S.open[side] === pos) return;
+  // another card already open on this side: swap it
+  if (S.open[side] !== null) board.children[S.open[side]].classList.remove('up');
+  S.open[side] = pos; S.started = true;
+  board.children[pos].classList.add('up');
+  const showsEnglish = (S.mode === 'ennl' && side === 'L') || (S.mode === 'picoen' && side === 'R');
+  if (showsEnglish) speak(WORDS[w][0]);
+  if (S.open.L === null || S.open.R === null) return;
+
+  const a = S.open.L, b = S.open.R, wl = S.left[a], wr = S.right[b];
+  const elL = $('boardL').children[a], elR = $('boardR').children[b];
+  S.moves++; statsMemory(); busy = true;
+  if (wl === wr) {
+    setTimeout(() => {
+      S.done.push(wl); elL.classList.add('done'); elR.classList.add('done');
+      showToast(`${cheer()} <em>${esc(WORDS[wl][0])}</em> = ${esc(WORDS[wl][1])}`, sentHTML(WORDS[wl][2]));
+      speak(WORDS[wl][0]);
+      S.open = { L: null, R: null }; busy = false; statsMemory();
+      if (S.done.length === S.n) { S.finished = true; setTimeout(finishMemory, 1400); }
+    }, 550);
+  } else {
+    setTimeout(() => { elL.classList.add('miss'); elR.classList.add('miss'); }, 500);
+    setTimeout(() => {
+      elL.classList.remove('up', 'miss'); elR.classList.remove('up', 'miss');
+      S.open = { L: null, R: null }; busy = false;
+    }, 1600);
+  }
+}
+
+function finishMemory(timeout) {
+  const nm = settings.name ? settings.name + ', ' : '';
+  if (timeout) {
+    // show the remaining pairs so she sees what she missed
+    S.left.forEach((w, i) => { if (!S.done.includes(w)) $('boardL').children[i].classList.add('up'); });
+    S.right.forEach((w, i) => { if (!S.done.includes(w)) $('boardR').children[i].classList.add('up'); });
+    const f = S.done.length;
+    setTimeout(() => showEnd({
+      title: 'Tijd is op!', stars: f / S.n >= .7 ? 2 : 1, k1: 'Gevonden', v1: `${f}/${S.n}`, secs: S.secs,
+      rec: (records[listKey(S.wl) + S.mode + '-' + S.n + clockKey(S.clock)] || {}).moves ?? '–', isNew: false, confetti: false,
+      text: f ? `${nm}je vond ${f} van de ${S.n} paren. Probeer het nog een keer, of kies een rustigere klok.` : 'Dat ging te snel. Kies een rustigere klok en probeer het nog een keer.',
+      missed: S.left.filter(w => !S.done.includes(w))
+    }), 1800);
+    return;
+  }
+  const key = listKey(S.wl) + S.mode + '-' + S.n + clockKey(S.clock), old = records[key];
+  const isNew = !old || S.moves < old.moves || (S.moves === old.moves && S.secs < old.secs);
+  if (isNew) { records[key] = { moves: S.moves, secs: S.secs }; store.set('wm1-records', records); }
+  const ratio = S.moves / S.n;
+  const stars = ratio <= 1.6 ? 3 : ratio <= 2.3 ? 2 : 1;
+  showEnd({
+    title: stars === 3 ? `${nm}geweldig!` : stars === 2 ? `${nm}goed gedaan!` : `${nm}gelukt!`,
+    stars, k1: 'Beurten', v1: S.moves, secs: S.secs, rec: records[key].moves, isNew,
+    text: (isNew && old ? 'Nieuw record! Sneller dan ooit.' : isNew ? `Je eerste record voor dit spel: ${S.moves} beurten.` : `Je record is ${old.moves} beurten. Lukt het de volgende keer in minder?`) + (S.limit ? ` Je had nog ${fmt(S.rem)} over.` : ''),
+    missed: [], memoryMissed: true
+  });
+  statsMemory();
+}
+
+/* ---------- QUIZ ---------- */
+function newQuiz(words) {
+  busy = false;
+  if (!words) setWords(settings.list);
+  const list = words ? shuffle([...words]) : shuffle([...WORDS.keys()]).slice(0, settings.count);
+  const lim = settings.clock === 'off' ? 0 : CLOCK.quiz[settings.clock];
+  Q = { list, i: 0, results: [], secs: 0, started: true, practice: !!words, hints: { pico: false, sent: false }, answered: false, clock: settings.clock, limit: lim, rem: lim, wl: settings.list };
+  renderQuiz();
+}
+
+function renderQuiz() {
+  const w = Q.list[Q.i], word = WORDS[w];
+  Q.hints = { pico: false, sent: false }; Q.answered = false; Q.rem = Q.limit;
+  $('qword').textContent = word[0];
+  $('qnum').textContent = (Q.i + 1) + '/' + Q.list.length;
+  $('hintBox').hidden = true; $('hintBox').innerHTML = '';
+  $('hintPico').disabled = false; $('hintSent').disabled = false;
+  $('feedback').textContent = ''; $('feedback').className = 'feedback';
+  $('next').hidden = true;
+  const toks = k => WORDS[k][1].toLowerCase().split(/[^a-zà-ÿ']+/).filter(t => t.length > 2);
+  const mine = new Set(toks(w));
+  const others = shuffle([...WORDS.keys()].filter(k => k !== w && !toks(k).some(t => mine.has(t)))).slice(0, 3);
+  const opts = shuffle([w, ...others]);
+  $('answers').innerHTML = '';
+  opts.forEach((k, n) => {
+    const b = document.createElement('button');
+    b.className = 'ans'; b.dataset.w = k;
+    b.innerHTML = `<kbd>${n + 1}</kbd>${esc(WORDS[k][1])}`;
+    b.onclick = () => answer(k, b);
+    $('answers').appendChild(b);
+  });
+  renderDots(); statsQuiz();
+  speak(word[0]);
+}
+
+function renderDots() {
+  $('dots').innerHTML = Q.list.map((_, k) => {
+    const r = Q.results[k];
+    const cls = r ? (r.ok ? (r.hint ? 'hint' : 'ok') : 'no') : (k === Q.i ? 'now' : '');
+    return `<i class="${cls}"></i>`;
+  }).join('');
+}
+
+function showHint(type) {
+  if (Q.answered) return;
+  const word = WORDS[Q.list[Q.i]];
+  Q.hints[type] = true;
+  $(type === 'pico' ? 'hintPico' : 'hintSent').disabled = true;
+  const parts = [];
+  if (Q.hints.pico) parts.push(`<div class="pico">${word[3]}</div>`);
+  if (Q.hints.sent) parts.push(`<div class="sent">${sentHTML(word[2])}</div>`);
+  $('hintBox').innerHTML = parts.join(''); $('hintBox').hidden = false;
+}
+
+function answer(k, btn) {
+  if (Q.answered) return;
+  Q.answered = true;
+  const w = Q.list[Q.i], ok = k === w, hint = Q.hints.pico || Q.hints.sent;
+  Q.results[Q.i] = { w, ok, hint };
+  [...$('answers').children].forEach(b => {
+    b.disabled = true;
+    if (+b.dataset.w === w) b.classList.add('right');
+    else if (b === btn) b.classList.add('wrong');
+    else b.classList.add('fade');
+  });
+  $('hintPico').disabled = true; $('hintSent').disabled = true;
+  if (ok) {
+    $('feedback').textContent = hint ? `${cheer()} Goed, met hulp van een hint.` : `${cheer()} Helemaal zelf, een ster!`;
+    $('feedback').className = 'feedback ok';
+  } else {
+    $('feedback').textContent = k === null ? `Tijd is op! ${WORDS[w][0]} = ${WORDS[w][1]}` : `Bijna! ${WORDS[w][0]} = ${WORDS[w][1]}`;
+    $('feedback').className = 'feedback no';
+    // show the sentence so the right answer sticks
+    Q.hints.sent = true; Q.hints.pico = true;
+    $('hintBox').innerHTML = `<div class="pico">${WORDS[w][3]}</div><div class="sent">${sentHTML(WORDS[w][2])}</div>`; $('hintBox').hidden = false;
+  }
+  $('next').hidden = false;
+  $('next').textContent = Q.i === Q.list.length - 1 ? 'Bekijk je score' : 'Volgende';
+  $('next').focus({ preventScroll: true });
+  renderDots(); statsQuiz();
+}
+
+function nextQuestion() {
+  if (!Q.answered) return;
+  if (Q.i < Q.list.length - 1) { Q.i++; renderQuiz(); }
+  else finishQuiz();
+}
+
+function statsQuiz() {
+  const good = Q.results.filter(r => r && r.ok).length;
+  const starsN = Q.results.filter(r => r && r.ok && !r.hint).length;
+  $('l1').textContent = 'Goed'; $('l2').textContent = 'Sterren';
+  $('s1').textContent = good + '/' + Q.list.length;
+  $('s2').textContent = '★ ' + starsN;
+  updateClock();
+  const r = records[listKey(Q.wl) + 'quiz-' + Q.list.length + clockKey(Q.clock)];
+  $('best').textContent = Q.practice ? 'oefenronde' : r ? r.points + ' punten' : '–';
+}
+
+function finishQuiz() {
+  Q.finished = true;
+  const n = Q.list.length;
+  const good = Q.results.filter(r => r.ok).length;
+  const pure = Q.results.filter(r => r.ok && !r.hint).length;
+  const points = pure * 2 + (good - pure);       // 2 points without hint, 1 with hint
+  const pct = points / (n * 2);
+  const stars = pct >= .85 ? 3 : pct >= .6 ? 2 : 1;
+  const missed = Q.results.filter(r => !r.ok).map(r => r.w);
+  const key = listKey(Q.wl) + 'quiz-' + n + clockKey(Q.clock), old = records[key];
+  let isNew = false;
+  if (!Q.practice && (!old || points > old.points)) { records[key] = { points }; store.set('wm1-records', records); isNew = true; }
+  const nm = settings.name ? settings.name + ', ' : '';
+  showEnd({
+    title: good === n ? `${nm}alles goed!` : stars >= 2 ? `${nm}goed gedaan!` : `${nm}gelukt!`,
+    stars, k1: 'Goed', v1: `${good}/${n}`, secs: Q.secs,
+    rec: Q.practice ? '–' : records[key].points + ' pt', isNew,
+    text: Q.practice ? (missed.length ? 'Nog een paar lastige woorden. Oefen ze nog een keer.' : 'Nu ken je ze allemaal!')
+      : `${pure} keer zonder hint en ${good - pure} keer met hint goed. Dat is ${points} punten.` + (isNew && old ? ' Nieuw record!' : ''),
+    missed
+  });
+  statsQuiz();
+}
+
+/* ---------- END SCREEN ---------- */
+function showEnd(o) {
+  $('endTitle').textContent = o.title;
+  $('stars').innerHTML = '★'.repeat(o.stars) + `<span class="off">${'★'.repeat(3 - o.stars)}</span>`;
+  $('e1k').textContent = o.k1; $('e1').textContent = o.v1; $('e2').textContent = fmt(o.secs); $('e3').textContent = o.rec;
+  $('eb').classList.toggle('new', o.isNew);
+  $('endText').textContent = o.text;
+  if (o.missed.length) {
+    $('missed').innerHTML = 'Deze woorden waren lastig: ' + o.missed.map(w => `<b>${esc(WORDS[w][0])}</b> = ${esc(WORDS[w][1])}`).join(', ');
+    $('missed').hidden = false; $('practice').hidden = false;
+    $('practice').onclick = () => { $('end').hidden = true; newQuiz(o.missed); };
+  } else { $('missed').hidden = true; $('practice').hidden = true; }
+  $('end').hidden = false;
+  if (o.confetti !== false) confetti();
+}
+
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cv = $('confetti'), ctx = cv.getContext('2d');
+  cv.width = innerWidth; cv.height = innerHeight;
+  const cols = ['#ffc94a', '#ff7a6b', '#4fd1a5', '#7fa2ff', '#fffaf0'];
+  const ps = Array.from({ length: 160 }, () => ({ x: Math.random() * cv.width, y: -20 - Math.random() * cv.height * .5, vx: (Math.random() - .5) * 3, vy: 2 + Math.random() * 3, r: Math.random() * 6.3, s: 6 + Math.random() * 6, c: cols[Math.floor(Math.random() * cols.length)] }));
+  let t = 0;
+  (function step() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ps.forEach(p => { p.x += p.vx; p.y += p.vy; p.r += .1; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); });
+    if (++t < 260) requestAnimationFrame(step); else ctx.clearRect(0, 0, cv.width, cv.height);
+  })();
+}
+
+/* ---------- FULLSCREEN ---------- */
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+function syncFs() { $('fs').textContent = fsEl() ? 'Klein scherm' : 'Volledig scherm'; if (S && settings.game === 'memory') setTimeout(layoutMemory, 120); }
+$('fs').onclick = async () => {
+  try {
+    if (fsEl()) { await (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+    else {
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req) throw new Error('none');
+      await req.call(el);
+    }
+  } catch {
+    showToast('Volledig scherm lukt hier niet', 'Open de pagina in Safari of Chrome en druk op Control + Command + F.', 5000);
+  }
+};
+document.addEventListener('fullscreenchange', syncFs);
+document.addEventListener('webkitfullscreenchange', syncFs);
+
+/* ---------- SETUP & START ---------- */
+function showGame() {
+  const quiz = settings.game === 'quiz';
+  $('memoryView').hidden = quiz; $('quizView').hidden = !quiz;
+  $('h1sub').textContent = quiz ? 'Quiz' : 'Memory';
+}
+function syncSetup() {
+  $('n1').value = settings.name;
+  const pick = (grp, attr, val) => document.querySelectorAll(`#${grp} .choice`).forEach(b => b.setAttribute('aria-checked', String(b.dataset[attr] === String(val))));
+  pick('listGroup', 'list', settings.list); pick('gameGroup', 'game', settings.game); pick('modeGroup', 'mode', settings.mode);
+  pick('sizeGroup', 'size', settings.size); pick('countGroup', 'count', settings.count); pick('clockGroup', 'clock', settings.clock);
+  const q = settings.game === 'quiz';
+  $('calmTxt').textContent = q ? '20 tellen per vraag' : `${settings.size * CLOCK.memory.calm} tellen`;
+  $('fastTxt').textContent = q ? '10 tellen per vraag' : `${settings.size * CLOCK.memory.fast} tellen`;
+  $('memOpts').hidden = settings.game !== 'memory'; $('quizOpts').hidden = settings.game !== 'quiz';
+  $('sound').setAttribute('aria-pressed', settings.sound); $('sound').textContent = settings.sound ? 'Voorlezen aan' : 'Voorlezen uit';
+}
+document.querySelectorAll('#listGroup .choice').forEach(b => b.onclick = () => { settings.list = b.dataset.list; syncSetup(); });
+document.querySelectorAll('#gameGroup .choice').forEach(b => b.onclick = () => { settings.game = b.dataset.game; syncSetup(); });
+document.querySelectorAll('#modeGroup .choice').forEach(b => b.onclick = () => { settings.mode = b.dataset.mode; syncSetup(); });
+document.querySelectorAll('#sizeGroup .choice').forEach(b => b.onclick = () => { settings.size = +b.dataset.size; syncSetup(); });
+document.querySelectorAll('#clockGroup .choice').forEach(b => b.onclick = () => { settings.clock = b.dataset.clock; syncSetup(); });
+document.querySelectorAll('#countGroup .choice').forEach(b => b.onclick = () => { settings.count = +b.dataset.count; syncSetup(); });
+$('start').onclick = () => {
+  settings.name = $('n1').value.trim();
+  store.set('wm1-settings', settings);
+  $('setup').hidden = true; showGame(); setWords(settings.list);
+  if (settings.game === 'quiz') newQuiz(); else newMemory();
+};
+$('newgame').onclick = () => { syncSetup(); $('setup').hidden = false; };
+$('again').onclick = () => { $('end').hidden = true; syncSetup(); $('setup').hidden = false; };
+$('sound').onclick = () => { settings.sound = !settings.sound; store.set('wm1-settings', settings); syncSetup(); if (settings.sound) speak('Hello!'); };
+$('hintPico').onclick = () => showHint('pico');
+$('hintSent').onclick = () => showHint('sent');
+$('say').onclick = () => { if (Q) { const s = settings.sound; settings.sound = true; speak(WORDS[Q.list[Q.i]][0]); settings.sound = s; } };
+$('next').onclick = nextQuestion;
+document.addEventListener('keydown', e => {
+  if (settings.game !== 'quiz' || !Q || !$('setup').hidden || !$('end').hidden || e.target.tagName === 'INPUT') return;
+  if (['1', '2', '3', '4'].includes(e.key) && !Q.answered) { const b = $('answers').children[+e.key - 1]; if (b) b.click(); }
+  else if (e.key === 'Enter' && Q.answered) { e.preventDefault(); nextQuestion(); }
+});
+addEventListener('resize', () => { if (S && settings.game === 'memory') layoutMemory(); });
+
+/* keep a running game across page updates */
+function start(data) {
+  syncSetup();
+  if (data && data.S && data.S.left) { S = data.S; S.open = { L: null, R: null }; }
+  if (data && data.Q && data.Q.list) { Q = data.Q; }
+  const g = settings.game === 'quiz' ? Q : S;
+  setWords(g && g.wl ? g.wl : (g ? 'u1' : settings.list));
+  showGame();
+  const running = settings.game === 'quiz' ? Q && !Q.finished : S && !S.finished;
+  if (running) { $('setup').hidden = true; settings.game === 'quiz' ? renderQuiz() : renderMemory(); }
+  else { if (!S) newMemory(); else renderMemory(); }   // board visible behind the setup panel
+}
+window.claude?.hot?.snapshot?.(() => ({ S, Q }));
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>
+</body>
+</html>
